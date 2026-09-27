@@ -8,8 +8,22 @@ from .domain import (
 )
 
 
+OBSERVATION_DAYS = 14
+
+
 def _date_ordinal(value):
     return datetime.fromisoformat(str(value)[:10]).date().toordinal()
+
+
+def observation_due_date(exposure_start):
+    """观察截止日 = 接触开始日 + 14天，返回 ISO 日期字符串。"""
+    try:
+        start = datetime.fromisoformat(str(exposure_start)[:10]).date()
+    except ValueError:
+        raise ValidationError(
+            "exposure_start must be an ISO date: %r" % (exposure_start,)
+        )
+    return (start + timedelta(days=OBSERVATION_DAYS)).isoformat()
 
 
 def _validate_case(actor, data, lookup):
@@ -19,6 +33,12 @@ def _validate_case(actor, data, lookup):
             raise ConflictError("duplicate case for person and onset date")
     if not data.get("symptoms"):
         raise ValidationError("symptoms are required")
+
+
+def _validate_contact(actor, data, lookup):
+    observation_due_date(data.get("exposure_start"))
+    if lookup is not None and not lookup("case", "id", data.get("case_id")):
+        raise ValidationError("linked case not found: " + str(data.get("case_id")))
 
 
 def _validate_lab_positive(actor, entity, data, lookup):
@@ -48,7 +68,7 @@ def cluster_cases(cases, max_days=14):
     return [group for group in groups if len(group["members"]) > 1]
 
 
-CUSTOM_CREATE = {'case': _validate_case}
+CUSTOM_CREATE = {'case': _validate_case, 'contact': _validate_contact}
 CUSTOM_TRANSITIONS = {('case', 'lab_positive'): _validate_lab_positive, ('case', 'mark_probable'): _validate_probable}
 
 

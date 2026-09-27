@@ -26,6 +26,13 @@ python3 app.py --db ./data.db --port 8303
 
 - `case`：病例和调查状态；`contact`：接触者随访。
 
+## 随访自动化
+
+- 病例执行`lab_positive`确认时，在同一事务内把该病例所有`identified`状态的接触者转为`following`（待随访），并按接触开始日 + 14天写入`due_at`观察截止日；任何一步出错都会整体回滚，病例状态和随访名单不会只成功一半。
+- 同一病例下同一`person_id`重复登记接触者时只保留一条，重复提交返回已存在的记录。
+- 病例确认后补录的接触者创建时直接进入`following`并自动给出观察截止日，不会漏出随访名单。
+- `GET /api/case-summary`：每个病例的接触人数、逾期人数（`following`且已过`due_at`）和最近观察截止日，首页表格同步展示。
+
 ## 主要接口
 
 - `GET /health`：健康检查。
@@ -34,6 +41,7 @@ python3 app.py --db ./data.db --port 8303
 - `GET /api/entities/<id>`：读取对象当前版本。
 - `POST /api/entities/<id>/actions`：提交`{"action":"动作名","data":{...},"expected_version":数字}`。
 - `GET /api/audit`：读取审计记录。
+- `GET /api/case-summary`：按病例汇总接触人数、逾期人数和最近观察截止日。
 
 请求身份通过`X-User-Id`和`X-Role`请求头传入。创建和动作的可执行角色由规则引擎控制。
 

@@ -34,8 +34,15 @@ python3 app.py --db ./data.db --port 8303
 - `GET /api/entities/<id>`：读取对象当前版本。
 - `POST /api/entities/<id>/actions`：提交`{"action":"动作名","data":{...},"expected_version":数字}`。
 - `GET /api/audit`：读取审计记录。
+- `GET /api/cases/summary`：每个病例的接触人数、逾期人数（待随访且已过观察截止日）和最近观察截止日。
 
 请求身份通过`X-User-Id`和`X-Role`请求头传入。创建和动作的可执行角色由规则引擎控制。
+
+## 随访自动化
+
+- 病例`lab_positive`确认时，已登记的接触者在同一事务中自动转为`following`（待随访），观察截止日为`exposure_start`+14天；中途出错则病例状态与随访名单整体回滚。
+- 同一病例下同一`person_id`重复登记只保留一条，返回已存在的记录。
+- 病例确认后补录的接触者创建时直接进入随访名单并计算观察截止日。
 
 ## 测试
 

@@ -9,12 +9,24 @@
     main { max-width: 820px; margin: auto; }
     pre { background: #f3f4f6; padding: 1rem; border-radius: 8px; overflow-x: auto; }
     button { padding: .5rem .8rem; cursor: pointer; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { border: 1px solid #d1d5db; padding: .4rem .6rem; text-align: left; }
+    th { background: #f3f4f6; }
+    td.overdue { color: #b91c1c; font-weight: 600; }
   </style>
 </head>
 <body>
 <main>
   <h1>传染病暴发调查与接触网络</h1>
-  <p>这是最小演示页面。使用浏览器或 curl 调用 JSON API。</p>
+  <h2>病例随访概览</h2>
+  <p><button onclick="loadSummary()">刷新概览</button></p>
+  <table>
+    <thead>
+      <tr><th>病例</th><th>状态</th><th>接触人数</th><th>逾期人数</th><th>最近观察截止日</th></tr>
+    </thead>
+    <tbody id="summary"><tr><td colspan="5">加载中…</td></tr></tbody>
+  </table>
+  <h2>服务状态</h2>
   <p><button onclick="checkHealth()">检查服务状态</button></p>
   <pre id="result">等待操作</pre>
   <h2>常用接口</h2>
@@ -22,13 +34,36 @@
 GET  /api/&lt;kind&gt;
 POST /api/&lt;kind&gt;
 GET  /api/entities/&lt;id&gt;
-POST /api/entities/&lt;id&gt;/actions</pre>
+POST /api/entities/&lt;id&gt;/actions
+GET  /api/cases/summary</pre>
 </main>
 <script>
+const STATUS_LABELS = {
+  reported: '已报告', investigating: '调查中', confirmed: '已确认',
+  probable: '临床诊断', recovered: '已康复', closed: '已关闭'
+};
 async function checkHealth() {
   const response = await fetch('/health');
   document.getElementById('result').textContent = JSON.stringify(await response.json(), null, 2);
 }
+async function loadSummary() {
+  const response = await fetch('/api/cases/summary');
+  const payload = await response.json();
+  const tbody = document.getElementById('summary');
+  if (!payload.items.length) {
+    tbody.innerHTML = '<tr><td colspan="5">暂无病例</td></tr>';
+    return;
+  }
+  tbody.innerHTML = payload.items.map(item => {
+    const overdue = item.overdue_count > 0
+      ? `<td class="overdue">${item.overdue_count}</td>`
+      : `<td>${item.overdue_count}</td>`;
+    const name = item.person_id || item.case_id;
+    const status = STATUS_LABELS[item.status] || item.status;
+    return `<tr><td>${name}</td><td>${status}</td><td>${item.contact_count}</td>${overdue}<td>${item.latest_due_at || '—'}</td></tr>`;
+  }).join('');
+}
+loadSummary();
 </script>
 </body>
 </html>

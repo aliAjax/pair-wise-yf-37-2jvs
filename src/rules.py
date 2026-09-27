@@ -12,6 +12,15 @@ def _date_ordinal(value):
     return datetime.fromisoformat(str(value)[:10]).date().toordinal()
 
 
+OBSERVATION_PERIOD_DAYS = 14
+
+
+def observation_due_date(exposure_start, days=OBSERVATION_PERIOD_DAYS):
+    """观察截止日 = 接触开始日 + 14天。"""
+    start = datetime.fromisoformat(str(exposure_start)[:10]).date()
+    return (start + timedelta(days=days)).isoformat()
+
+
 def _validate_case(actor, data, lookup):
     rows = lookup("case", "person_id", data.get("person_id")) or [] if lookup else []
     for row in rows:
@@ -32,6 +41,13 @@ def _validate_probable(actor, entity, data, lookup):
         raise ValidationError("probable case requires an epidemiological link")
 
 
+def _validate_contact(actor, data, lookup):
+    try:
+        datetime.fromisoformat(str(data.get("exposure_start"))[:10])
+    except ValueError:
+        raise ValidationError("exposure_start must be a valid ISO date")
+
+
 def cluster_cases(cases, max_days=14):
     groups = []
     for case in sorted(cases, key=lambda item: str(item.get("onset_date", ""))):
@@ -48,7 +64,7 @@ def cluster_cases(cases, max_days=14):
     return [group for group in groups if len(group["members"]) > 1]
 
 
-CUSTOM_CREATE = {'case': _validate_case}
+CUSTOM_CREATE = {'case': _validate_case, 'contact': _validate_contact}
 CUSTOM_TRANSITIONS = {('case', 'lab_positive'): _validate_lab_positive, ('case', 'mark_probable'): _validate_probable}
 
 

@@ -140,6 +140,57 @@ class SQLiteRepository:
             connection.close()
         return self.get_entity(entity_id)
 
+    def apply_bundle(self, updates, audits):
+        """在同一事务中应用多个实体更新和审计记录。
+
+        病例状态与随访名单要么全部提交、要么全部回滚，不会出现只成功一半。
+        每个更新可在事务内校验expected_version（乐观锁）。
+        """
+        now = utcnow()
+        connection = self._connect()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            for update in updates:
+                row = connection.execute(
+                    "SELECT version FROM entities WHERE id = ?", (update["id"],)
+                ).fetchone()
+                if not row:
+                    raise NotFoundError("entity not found: " + update["id"])
+                current_version = int(row["version"])
+                expected = update.get("expected_version")
+                if expected is not None and current_version != int(expected):
+                    raise ConflictError(
+                        "version conflict: expected %s, found %s"
+                        % (expected, current_version)
+                    )
+                payload = json.dumps(update["data"], ensure_ascii=False, sort_keys=True)
+                connection.execute(
+                    "UPDATE entities SET status = ?, version = version + 1, data = ?, updated_at = ? "
+                    "WHERE id = ? AND version = ?",
+                    (update["status"], payload, now, update["id"], current_version),
+                )
+            for entry in audits:
+                connection.execute(
+                    "INSERT INTO audit_log(entity_id, actor_id, actor_role, action, from_status, to_status, detail, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        entry["entity_id"],
+                        entry["actor_id"],
+                        entry["actor_role"],
+                        entry["action"],
+                        entry["from_status"],
+                        entry["to_status"],
+                        json.dumps(entry["detail"], ensure_ascii=False, sort_keys=True),
+                        now,
+                    ),
+                )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
     def append_audit(self, entity_id, actor_id, actor_role, action, from_status, to_status, detail):
         with self._connect() as connection:
             connection.execute(
